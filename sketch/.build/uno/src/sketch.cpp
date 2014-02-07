@@ -1,13 +1,10 @@
 #include <Arduino.h>
 
 void setup();
-void startstop();
-int aInToOut(int number);
-void forward(int speed);
+void printReadings(int ls, int rs);
+int calculateError(int reading);
+int avg(int a, int b);
 void adjustedForward(int leftSpeed, int rightSpeed);
-void reverse(int speed);
-void left(int speed);
-void right(int speed);
 void stop();
 void loop();
 #line 1 "src/sketch.ino"
@@ -18,17 +15,21 @@ int rightMotor1 = 6;
 int rightMotor2 = 9;
 
 /* INPUT CONFIGURATION */
-int pushbutton = 2;
-int lastPBState = LOW;
-bool on = false;
+int onSwitch = 2;
+int FL = A0;
+int FR = A1;
+int NL = A2;
+int NR = A3;
+
+unsigned int readFL;
+unsigned int readFR;
+unsigned int readNL;
+unsigned int readNR;
 
 /* VEHICLE CONFIGURATION */
-int speed = 200; // out of 255
-int leftSpeed;
-int rightSpeed;
-
-int leftPhotoTransistor = A3;
-int rightPhotoTransistor = A2;
+int maxBrightness = 50;
+int maxSpeed = 80;
+int gain = 1;
 
 void setup(){
   Serial.begin(9600);
@@ -36,50 +37,45 @@ void setup(){
   pinMode(leftMotor2, OUTPUT);
   pinMode(rightMotor1, OUTPUT);
   pinMode(rightMotor2, OUTPUT);
+
+  pinMode(FL, INPUT);
+  pinMode(FR, INPUT);
+  pinMode(NL, INPUT);
+  pinMode(NR, INPUT);
 }
 
 /* HELPER FUNCTIONS */
 
-void startstop(){
-  on = !on;
+void printReadings(int ls, int rs){
+  Serial.print(readFL);
+  Serial.print(" ");
+  Serial.print(readNL);
+  Serial.print(" ");
+  Serial.print(readNR);
+  Serial.print(" ");
+  Serial.print(readFR);
+  Serial.print("     ");
+  Serial.print(ls);
+  Serial.print("     ");
+  Serial.print(rs);
+  Serial.println();
 }
 
-int aInToOut(int number){
-  return (((number*40)/1024.0)*255);
+int calculateError(int reading){
+  int error = maxBrightness - reading;
+  if (error < 5)
+    return 0;
+  return error;
 }
 
-void forward(int speed){
-  analogWrite(leftMotor2, speed);
-  analogWrite(leftMotor1, 0);
-  analogWrite(rightMotor2, speed);
-  analogWrite(rightMotor1, 0);
+int avg(int a, int b){
+  return (a+b)/2;
 }
 
 void adjustedForward(int leftSpeed, int rightSpeed){
   analogWrite(leftMotor2, leftSpeed);
   analogWrite(leftMotor1, 0);
   analogWrite(rightMotor2, rightSpeed);
-  analogWrite(rightMotor1, 0);
-}
-
-void reverse(int speed){
-  analogWrite(leftMotor1, speed);
-  analogWrite(leftMotor2, 0);
-  analogWrite(rightMotor1, speed);
-  analogWrite(rightMotor2, 0);
-}
-
-void left(int speed){
-  analogWrite(leftMotor2, speed);
-  analogWrite(leftMotor1, 0);
-  analogWrite(rightMotor2, 0);
-  analogWrite(rightMotor1, speed);
-}
-
-void right(int speed){
-  analogWrite(leftMotor2, 0);
-  analogWrite(leftMotor1, speed);
-  analogWrite(rightMotor2, speed);
   analogWrite(rightMotor1, 0);
 }
 
@@ -91,18 +87,61 @@ void stop(){
 }
 
 void loop(){
-  int pbResponse = digitalRead(pushbutton);
-  if (pbResponse == HIGH && lastPBState == LOW){
-    startstop();
-  }
-  lastPBState = pbResponse;
+  readFL = analogRead(FL);
+  readNL = analogRead(NL);
+  readNR = analogRead(NR);
+  readFR = analogRead(FR);
 
-  leftSpeed = aInToOut(analogRead(leftPhotoTransistor));
-  rightSpeed = aInToOut(analogRead(rightPhotoTransistor));
-  // Serial.println(leftSpeed);
-  if (on){
+ 
+  // COMPARISON BASED CONTROL
+
+  // int leftSpeed, rightSpeed;
+  // int leftError, rightError;
+  // if (readNL < (readNR - 5)){
+  //   leftError = readNR - readNL;
+  //   leftSpeed = maxSpeed - gain*leftError;
+  //   if (leftSpeed < 10) leftSpeed = 0;
+
+  //   rightSpeed = maxSpeed;
+  // }
+  // else if (readNL > (readNR + 5)){
+  //   rightError = readNL - readNR;
+  //   rightSpeed = maxSpeed - gain*rightError;
+  //   if (rightSpeed < 10) rightSpeed = 0;
+
+  //   leftSpeed = maxSpeed;
+  // }
+
+  // HARDCODED CONTROL
+
+  // int leftError = calculateError(readNL);
+  // int leftSpeed = maxSpeed - gain*leftError;
+  // if (leftSpeed < 10)
+  //   leftSpeed = 0;
+
+  // int rightError = calculateError(readNR);
+  // int rightSpeed = maxSpeed - gain*rightError;
+  // if (rightSpeed < 10)
+  //   rightSpeed = 0;
+
+  // if (leftSpeed < rightSpeed){
+  //   rightSpeed = maxSpeed;
+  //   // leftSpeed = maxSpeed-gain*rightError;
+  // }
+  // else {
+  //   // rightSpeed = maxSpeed - gain*leftError;
+  //   leftSpeed = maxSpeed;
+  // }
+
+  // READING COMPARISON
+
+  int leftSpeed = gain*readFL;
+  int rightSpeed = gain*readFR;
+
+  printReadings(leftSpeed, rightSpeed);
+
+  if (digitalRead(onSwitch)==1){
     adjustedForward(leftSpeed, rightSpeed);
-    // forward(speed);
   }
   else {
     stop();
